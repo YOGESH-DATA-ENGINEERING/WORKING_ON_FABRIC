@@ -435,3 +435,141 @@ df_dim.groupBy("city") \
 # META   "language": "python",
 # META   "language_group": "synapse_pyspark"
 # META }
+
+# CELL ********************
+
+from pyspark.sql.functions import col, count, sum
+
+df_dim = spark.table("dim_orders")
+
+df_agg_city_sales = (
+    df_dim
+    .groupBy("city", "order_year")
+    .agg(
+        count("*").alias("total_orders"),
+        sum(col("total_amount")).alias("total_revenue")
+    )
+)
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+# (Recommended) Cast revenue to DECIMAL for finance
+from pyspark.sql.functions import expr
+
+df_agg_city_sales = df_agg_city_sales.withColumn(
+    "total_revenue",
+    expr("CAST(total_revenue AS DECIMAL(18,2))")
+)
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+# Write as Delta table (Gold Serving)
+df_agg_city_sales.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .saveAsTable("agg_city_sales")
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+# Validate the table
+df_agg = spark.table("agg_city_sales")
+
+df_agg.show(10)
+df_agg.printSchema()
+df_agg.count()
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+from pyspark.sql.functions import col, count, sum, expr
+
+df_dim = spark.table("dim_orders")
+
+df_agg_monthly_sales = (
+    df_dim
+    .groupBy("order_year", "order_month")
+    .agg(
+        count("*").alias("total_orders"),
+        sum(col("total_amount")).alias("total_revenue")
+    )
+)
+
+df_agg_monthly_sales = df_agg_monthly_sales.withColumn(
+    "total_revenue",
+    expr("CAST(total_revenue AS DECIMAL(18,2))")
+)
+
+df_agg_monthly_sales.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .saveAsTable("agg_monthly_sales")
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+df_agg = spark.table("agg_monthly_sales")
+
+df_agg.show(10)
+df_agg.printSchema()
+df_agg.count()
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+# Top 5 Cities by Revenue
+from pyspark.sql.functions import col, sum
+
+spark.table("agg_city_sales") \
+     .groupBy("city") \
+     .agg(
+         sum(col("total_revenue")).alias("city_revenue")
+     ) \
+     .orderBy(col("city_revenue").desc()) \
+     .limit(5) \
+     .show()
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
