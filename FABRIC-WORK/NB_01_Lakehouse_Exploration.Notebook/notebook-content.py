@@ -197,3 +197,241 @@ df_stg.groupBy("order_status").count().show()
 # META   "language": "python",
 # META   "language_group": "synapse_pyspark"
 # META }
+
+# CELL ********************
+
+from pyspark.sql.functions import current_timestamp, lit
+
+df_stg = spark.table("stg_orders")
+
+total_count = df_stg.count()
+invalid_qty_count = df_stg.filter(df_stg.quantity <= 0).count()
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+monitoring_df = spark.createDataFrame(
+    [
+        (
+            "orders_pipeline",   # pipeline_name
+            "silver",            # layer_name
+            "stg_orders",        # table_name
+            total_count,
+            invalid_qty_count
+        )
+    ],
+    [
+        "pipeline_name",
+        "layer_name",
+        "table_name",
+        "total_records",
+        "invalid_quantity_count"
+    ]
+).withColumn("run_timestamp", current_timestamp())
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+monitoring_df.write \
+    .format("delta") \
+    .mode("append") \
+    .saveAsTable("pipeline_monitoring")
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+spark.table("pipeline_monitoring").show(truncate=False)
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+df_stg = spark.table("stg_orders")
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+df_stg.show(5)
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+from pyspark.sql.functions import col, year, month, when
+df_stg = spark.table("stg_orders")
+
+df_curated = (
+    df_stg
+    # Derive order year
+    .withColumn("order_year", year(col("order_date")))
+    
+    # Derive order month
+    .withColumn("order_month", month(col("order_date")))
+    
+    # Business bucket for order value
+    .withColumn(
+        "order_value_bucket",
+        when(col("total_amount") < 5000, "LOW")
+        .when((col("total_amount") >= 5000) & (col("total_amount") <= 15000), "MEDIUM")
+        .otherwise("HIGH")
+    )
+)
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+df_curated.select(
+    "order_date",
+    "total_amount",
+    "order_year",
+    "order_month",
+    "order_value_bucket"
+).show(10)
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+df_curated.groupBy("order_value_bucket").count().show()
+
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+df_curated.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .saveAsTable("dim_orders")
+
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+df_dim = spark.table("dim_orders")
+
+df_dim.show(10)
+df_dim.printSchema()
+df_dim.count()
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+df_dim.groupBy("order_value_bucket").count().alias("bucket_count").show()
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+df_dim.groupBy("order_status").count().show()
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+from pyspark.sql.functions import format_number, sum, col
+
+df_dim = spark.table("dim_orders")
+
+df_dim.groupBy("city") \
+      .agg(
+          format_number(sum(col("total_amount")), 2).alias("total_revenue")
+      ) \
+      .orderBy(col("total_revenue").desc()) \
+      .show()
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+from pyspark.sql.functions import expr
+
+df_dim.groupBy("city") \
+      .agg(
+          expr("CAST(SUM(total_amount) AS DECIMAL(18,2))").alias("total_revenue")
+      ) \
+      .show()
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
