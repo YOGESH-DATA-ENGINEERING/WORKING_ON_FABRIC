@@ -573,3 +573,90 @@ spark.table("agg_city_sales") \
 # META   "language": "python",
 # META   "language_group": "synapse_pyspark"
 # META }
+
+# CELL ********************
+
+spark.sql("""
+CREATE TABLE IF NOT EXISTS pipeline_monitoring_status (
+    pipeline_name STRING,
+    layer STRING,
+    record_count LONG,
+    load_date DATE,
+    status STRING
+)
+USING DELTA
+""")
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+from pyspark.sql.functions import current_date, lit
+
+raw_count = spark.table("raw_orders").count()
+stg_count = spark.table("stg_orders").count()
+dim_count = spark.table("dim_orders").count()
+city_count = spark.table("agg_city_sales").count()
+monthly_count = spark.table("agg_monthly_sales").count()
+
+
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+monitoring_data = [
+    ("orders_pipeline", "raw", raw_count, "SUCCESS"),
+    ("orders_pipeline", "silver", stg_count, "SUCCESS"),
+    ("orders_pipeline", "gold_core", dim_count, "SUCCESS"),
+    ("orders_pipeline", "gold_serving_city", city_count, "SUCCESS"),
+    ("orders_pipeline", "gold_serving_monthly", monthly_count, "SUCCESS")
+]
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+monitoring_df = spark.createDataFrame(
+    monitoring_data,
+    ["pipeline_name", "layer", "record_count", "status"]
+).withColumn("load_date", current_date())
+
+monitoring_df.write \
+    .format("delta") \
+    .mode("append") \
+    .saveAsTable("pipeline_monitoring_status")
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
+spark.table("pipeline_monitoring_status").show(truncate=False)
+
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
